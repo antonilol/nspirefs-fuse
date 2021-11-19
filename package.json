@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "fuse-native": "^2.2.6"
+  }
+}

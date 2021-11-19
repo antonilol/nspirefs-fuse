@@ -1,0 +1,5 @@
+#!/bin/bash
+
+node nspirefs-fuse.js
+
+umount mnt
