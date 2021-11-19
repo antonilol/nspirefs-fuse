@@ -102,7 +102,11 @@ function hwInfo() {
 const fuse = new Fuse(
 	'mnt',
 	{
-		readdir: function (path, cb) {
+		init: function(cb) {
+			hwInfo();
+			return cb(0);
+		},
+		readdir: function(path, cb) {
 			const p = utils.splitPath(path);
 			if (p.length) {
 				if (p[0] == 'My Documents') {
@@ -121,7 +125,7 @@ const fuse = new Fuse(
 				return cb(null, r);
 			}
 		},
-		getattr: function (path, cb) {
+		getattr: function(path, cb) {
 			const p = utils.splitPath(path);
 			if (p.length) {
 				if (p[0] == 'My Documents') {
@@ -142,13 +146,13 @@ const fuse = new Fuse(
 			}
 			return cb(Fuse.ENOENT);
 		},
-		open: function (path, flags, cb) {
+		open: function(path, flags, cb) {
 			return cb(0, 42);
 		},
-		release: function (path, fd, cb) {
+		release: function(path, fd, cb) {
 			return cb(0);
 		},
-		read: function (path, fd, buf, len, pos, cb) {
+		read: function(path, fd, buf, len, pos, cb) {
 			const p = utils.splitPath(path);
 			if (p.length) {
 				if (p[0] == 'My Documents') {
@@ -174,7 +178,7 @@ const fuse = new Fuse(
 	}
 );
 
-fuse.mount(function (err) {
+fuse.mount(function(err) {
 	if (err) {
 		throw err;
 	}
