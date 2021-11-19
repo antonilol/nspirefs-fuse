@@ -1,107 +1,31 @@
 const Fuse = require('fuse-native');
-const fs = require('fs');
-const path = require('path');
 const stat = require('fuse-native/test/fixtures/stat');
-const child_process = require("child_process");
+const utils = require('./utils');
 
-const tools = '/usr/bin/nspire-tools';
 const fm = 'filemanager';
+
+const DIR_RO = 0o40555;
+const DIR_RW = 0o40755;
+const FILE_RO = 0o100444;
+const FILE_RW = 0o100644;
 const DIR_SIZE = 4096;
 const MAX_CACHE_AGE = 7000; // ms
 const MAX_CACHE_AGE_INFO = 30000; // ms
 
-var c_err = '';
-
-function exec(...command) {
-	const c = tools + ' ' + command.map(x => x.replaceAll(' ', '\\ ')).join(' ');
-	var p;
-	try {
-		p = child_process.execSync(c);
-	}
-	catch (e) {
-		return {
-			exit: e.status,
-			stdout: e.stdout.toString()
-		};
-	}
-	return {
-		exit: 0,
-		stdout: p.toString()
-	}
-}
-
-function splitPath(p) {
-	return path.resolve(p).split('/').filter(x => x);
-}
-
-function joinPath(p) {
-	return '/' + p.join('/');
-}
-
-function createStat(date, size, dir=false) {
-	const d = typeof date === 'string' ? new Date(date) : date;
-	const stat = {
-		mtime: d,
-		atime: d,
-		ctime: d,
-		size: dir ? DIR_SIZE : size,
-		mode: dir ? 0o40755 : 0o100644,
-		uid: process.getuid(),
-		gid: process.getgid()
-	};
-	return stat;
-}
-
-function error() {
-	if (process.getuid() != 0) {
-		c_err = 'Error.\nPlease check USB connection or run this program as root.\n';
-	} else {
-		c_err = 'Error.\nPlease check USB connection.\n';
-	}
-}
-
-const cache = {
-	stat: createStat(new Date(), DIR_SIZE, true),
-	list: {}
-};
-
-function getLocalCache(path, add=true) {
-	var e = true;
-	var localCache = cache;
-	splitPath(path).forEach((f, i, l) => {
-		if (!e || !localCache.list) {
-			e = false;
-			return;
-		}
-		if (!localCache.list[f]) {
-			if (add) {
-				localCache.list[f] = { list: {} };
-			} else {
-				e = false;
-				return;
-			}
-		}
-		localCache = localCache.list[f];
-	});
-
-	if (e) {
-		return localCache;
-	}
-}
 
 function ls(path) {
-	const localCache = getLocalCache(path, false);
+	const localCache = utils.getLocalCache(path, false);
 	if (localCache && localCache.stat && localCache.lexp > new Date()) {
 		return Object.keys(localCache.list);
 	}
 
-	const o = exec(fm, 'ls', path);
+	const o = utils.exec(fm, 'ls', path);
 	if (o.stdout.toLowerCase().startsWith('error')) {
-		error();
+		utils.error();
 		return;
 	}
-	c_err = '';
-	const localCache_ = getLocalCache(path);
+	utils.clearError();
+	const localCache_ = utils.getLocalCache(path);
 
 	localCache_.lexp = new Date().getTime() + MAX_CACHE_AGE;
 
@@ -118,7 +42,7 @@ function ls(path) {
 			localCache_.list[file] = {};
 		}
 		const lc = localCache_.list[file];
-		lc.stat = createStat(z[1], z[0], dir);
+		lc.stat = utils.createStat(z[1], z[0], dir);
 		if (!lc.list) {
 			lc.list = {};
 		}
@@ -129,17 +53,17 @@ function ls(path) {
 
 const infos = [ 'Name', 'Size', 'Date', 'Type' ];
 function info(path) {
-	const localCache = getLocalCache(path, false);
+	const localCache = utils.getLocalCache(path, false);
 	if (localCache && localCache.stat && localCache.exp > new Date()) {
 		return localCache.stat;
 	}
 
-	const o = exec(fm, 'info', path);
+	const o = utils.exec(fm, 'info', path);
 	if (o.stdout.toLowerCase().startsWith('error')) {
-		error();
+		utils.error();
 		return;
 	}
-	c_err = '';
+	utils.clearError();
 
 	var i = {};
 	o.stdout.split('\n').forEach(x => {
@@ -151,8 +75,8 @@ function info(path) {
 	});
 
 	const dir = i.Type == 'directory';
-	const stat = createStat(i.Date, parseInt(i.Size), dir);
-	const localCache_ = getLocalCache(path);
+	const stat = utils.createStat(i.Date, parseInt(i.Size), dir);
+	const localCache_ = utils.getLocalCache(path);
 	localCache_.stat = stat;
 	localCache_.exp = new Date().getTime() + MAX_CACHE_AGE;
 	return stat;
@@ -161,12 +85,12 @@ function info(path) {
 var hwInfoCache = { info: '' };
 function hwInfo() {
 	if (!hwInfoCache.info || hwInfoCache.exp < new Date()) {
-		const o = exec('info');
+		const o = utils.exec('info');
 		if (o.stdout.toLowerCase().startsWith('error')) {
-			error();
+			utils.error();
 			return '';
 		}
-		c_err = '';
+		utils.clearError();
 
 		hwInfoCache.info = o.stdout;
 		hwInfoCache.exp = new Date().getTime() + MAX_CACHE_AGE_INFO;
@@ -179,10 +103,10 @@ const fuse = new Fuse(
 	'mnt',
 	{
 		readdir: function (path, cb) {
-			const p = splitPath(path);
+			const p = utils.splitPath(path);
 			if (p.length) {
 				if (p[0] == 'My Documents') {
-					const l = ls(joinPath(p.slice(1)));
+					const l = ls(utils.joinPath(p.slice(1)));
 					if (!l) {
 						return cb(Fuse.ENOENT);
 					}
@@ -191,30 +115,30 @@ const fuse = new Fuse(
 				return cb(Fuse.ENOENT);
 			} else {
 				const r = [ 'My Documents', 'info' ];
-				if (c_err) {
+				if (utils.getError()) {
 					r.push('error');
 				}
 				return cb(null, r);
 			}
 		},
 		getattr: function (path, cb) {
-			const p = splitPath(path);
+			const p = utils.splitPath(path);
 			if (p.length) {
 				if (p[0] == 'My Documents') {
-					const dPath = joinPath(p.slice(1));
+					const dPath = utils.joinPath(p.slice(1));
 					if (dPath === '/') {
-						return cb(null, stat({ mode: 0o40555, size: 4096 }));
+						return cb(null, stat({ mode: DIR_RO, size: DIR_SIZE }));
 					}
 					return cb(null, info(dPath))
 				} else {
 					if (p[0] == 'info') {
-						return cb(null, stat({ mode: 0o100444, size: hwInfo().length }));
-					} else if (p[0] == 'error' && c_err) {
-						return cb(null, stat({ mode: 0o100444, size: c_err.length }));
+						return cb(null, stat({ mode: FILE_RO, size: hwInfo().length }));
+					} else if (p[0] == 'error' && utils.getError()) {
+						return cb(null, stat({ mode: FILE_RO, size: utils.getError().length }));
 					}
 				}
 			} else {
-				return cb(null, stat({ mode: 0o40555, size: 4096 }));
+				return cb(null, stat({ mode: DIR_RO, size: DIR_SIZE }));
 			}
 			return cb(Fuse.ENOENT);
 		},
@@ -225,18 +149,18 @@ const fuse = new Fuse(
 			return cb(0);
 		},
 		read: function (path, fd, buf, len, pos, cb) {
-			const p = splitPath(path);
+			const p = utils.splitPath(path);
 			if (p.length) {
 				if (p[0] == 'My Documents') {
-					const dPath = joinPath(p.slice(1));
+					const dPath = utils.joinPath(p.slice(1));
 					return cb(0);
 				} else {
 					if (p[0] == 'info') {
 						const str = hwInfo().slice(pos, pos + len);
 						buf.write(str);
 						return cb(str.length);
-					} else if (p[0] == 'error' && c_err) {
-						const str = c_err.slice(pos, pos + len);
+					} else if (p[0] == 'error' && utils.getError()) {
+						const str = utils.getError().slice(pos, pos + len);
 						buf.write(str);
 						return cb(str.length);
 					}
