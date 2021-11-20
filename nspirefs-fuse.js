@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 const Fuse = require('fuse-native');
 const stat = require('fuse-native/test/fixtures/stat');
 const utils = require('./utils');
