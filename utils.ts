@@ -1,6 +1,5 @@
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require("child_process");
+import * as path from 'path';
+import { execSync } from 'child_process';
 
 const tools = '/usr/bin/nspire-tools';
 
@@ -10,7 +9,7 @@ const DIR_SIZE = 4096;
 
 var errMsg = '';
 
-function error() {
+export function error() {
 	if (process.getuid() != 0) {
 		errMsg = 'Error.\nPlease check USB connection or run this program as root.\n';
 	} else {
@@ -18,19 +17,18 @@ function error() {
 	}
 }
 
-function clearError() {
+export function clearError() {
 	errMsg = '';
 }
 
-function getError() {
+export function getError() {
 	return errMsg;
 }
 
-
-function exec(...command) {
-	var p;
+export function exec(...command: string[]): { exit: number, stdout: string } {
+	var p: Buffer;
 	try {
-		p = execSync(tools + ' ' + command.map(x => x.replaceAll(' ', '\\ ')).join(' '));
+		p = execSync(tools + ' ' + command.map(x => x.replace(/ /g, '\\ ')).join(' '));
 	}
 	catch (e) {
 		return {
@@ -44,17 +42,25 @@ function exec(...command) {
 	}
 }
 
-
-function splitPath(p) {
+export function splitPath(p: string): string[] {
 	return path.resolve(p).split('/').filter(x => x);
 }
 
-function joinPath(p) {
+export function joinPath(p: string[]): string {
 	return '/' + p.join('/');
 }
 
+export interface Stat {
+	mtime: Date,
+	atime: Date,
+	ctime: Date,
+	size: number,
+	mode: number,
+	uid: number,
+	gid: number
+}
 
-function createStat(date, size, dir=false) {
+export function createStat(date: Date | string, size: number, dir=false): Stat {
 	const d = typeof date === 'string' ? new Date(date) : date;
 	const stat = {
 		mtime: d,
@@ -68,16 +74,22 @@ function createStat(date, size, dir=false) {
 	return stat;
 }
 
+export interface Cache {
+	list?: { [f: string]: Cache },
+	stat?: Stat,
+	exp?: number,
+	lexp?: number
+}
 
-const cache = {
+const cache: Cache = {
 	stat: createStat(new Date(), DIR_SIZE, true),
 	list: {}
 };
 
-function getLocalCache(path, add=true) {
+export function getLocalCache(path: string, add=true): Cache | undefined {
 	var e = true;
 	var localCache = cache;
-	splitPath(path).forEach((f, i, l) => {
+	splitPath(path).forEach(f => {
 		if (!e || !localCache.list) {
 			e = false;
 			return;
@@ -96,13 +108,3 @@ function getLocalCache(path, add=true) {
 		return localCache;
 	}
 }
-
-module.exports = {
-	error, clearError, getError,
-	exec,
-	splitPath, joinPath,
-	createStat,
-	getLocalCache
-};
-
-// vim: set ts=4 sw=4 tw=0 noet :

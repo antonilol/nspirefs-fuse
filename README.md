@@ -14,6 +14,7 @@ ______
 git clone https://github.com/antonilol/nspirefs-fuse.git
 cd nspirefs-fuse
 npm i
+npm run build
 ```
 
 ### Install [ErnyTech/nspire-tools](https://github.com/ErnyTech/nspire-tools):
@@ -54,6 +55,12 @@ cd /usr/bin
 sudo ln -sr nspire-tools nspire-filemanager
 sudo ln -sr nspire-tools nspire-updater
 sudo ln -sr nspire-tools nspire-info
+```
+
+## Usage
+
+```bash
+sudo node nspirefs-fuse <mountpoint>
 ```
 
 ______

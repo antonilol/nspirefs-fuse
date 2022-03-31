@@ -1,10 +1,15 @@
-#!/usr/bin/env node
-
-const Fuse = require('fuse-native');
-const stat = require('fuse-native/test/fixtures/stat');
-const utils = require('./utils');
+import * as Fuse from 'fuse-native';
+import * as stat from 'fuse-native/test/fixtures/stat';
+import * as utils from './utils';
 
 const fm = 'filemanager';
+
+if (process.argv.length < 3) {
+	console.log('Mount point unspecified');
+	process.exit(1);
+}
+
+const mount = process.argv[2];
 
 const DIR_RO = 0o40555;
 const DIR_RW = 0o40755;
@@ -15,9 +20,9 @@ const MAX_CACHE_AGE = 7000; // ms
 const MAX_CACHE_AGE_INFO = 30000; // ms
 
 
-function ls(path) {
+function ls(path: string) {
 	const localCache = utils.getLocalCache(path, false);
-	if (localCache && localCache.stat && localCache.lexp > new Date()) {
+	if (localCache && localCache.stat && localCache.lexp > new Date().getTime()) {
 		return Object.keys(localCache.list);
 	}
 
@@ -32,10 +37,11 @@ function ls(path) {
 	localCache_.lexp = new Date().getTime() + MAX_CACHE_AGE;
 
 	return o.stdout.split('\n').filter(l => l).map(l => {
+		// size, date, name
 		const z = l.split('\t');
 		var file = z[2];
 		var dir = false;
-		if (file.startsWith('\033')) {
+		if (file.startsWith('\x1b')) {
 			file = file.slice(9);
 			dir = true;
 		}
@@ -44,7 +50,7 @@ function ls(path) {
 			localCache_.list[file] = {};
 		}
 		const lc = localCache_.list[file];
-		lc.stat = utils.createStat(z[1], z[0], dir);
+		lc.stat = utils.createStat(z[1], parseInt(z[0]), dir);
 		if (!lc.list) {
 			lc.list = {};
 		}
@@ -53,10 +59,10 @@ function ls(path) {
 	});
 }
 
-const infos = [ 'Name', 'Size', 'Date', 'Type' ];
-function info(path) {
+const keys = [ 'Name', 'Size', 'Date', 'Type' ];
+function info(path: string) {
 	const localCache = utils.getLocalCache(path, false);
-	if (localCache && localCache.stat && localCache.exp > new Date()) {
+	if (localCache && localCache.stat && localCache.exp > new Date().getTime()) {
 		return localCache.stat;
 	}
 
@@ -67,14 +73,19 @@ function info(path) {
 	}
 	utils.clearError();
 
-	var i = {};
-	o.stdout.split('\n').forEach(x => {
-		infos.forEach(z => {
+	const i: {
+		Name: string,
+		Size: string,
+		Date: string,
+		Type: string
+	} = o.stdout.split('\n').reduce((v, x) => {
+		keys.forEach(z => {
 			if (x.startsWith(z)) {
-				i[z] = x.slice(z.length + 2);
+				v[z] = x.slice(z.length + 2);
 			}
 		});
-	});
+		return v;
+	}, {}) as any;
 
 	const dir = i.Type == 'directory';
 	const stat = utils.createStat(i.Date, parseInt(i.Size), dir);
@@ -84,9 +95,9 @@ function info(path) {
 	return stat;
 }
 
-var hwInfoCache = { info: '' };
+const hwInfoCache = { info: '', exp: 0 };
 function hwInfo() {
-	if (!hwInfoCache.info || hwInfoCache.exp < new Date()) {
+	if (hwInfoCache.exp < new Date().getTime()) {
 		const o = utils.exec('info');
 		if (o.stdout.toLowerCase().startsWith('error')) {
 			utils.error();
@@ -102,7 +113,7 @@ function hwInfo() {
 }
 
 const fuse = new Fuse(
-	'mnt',
+	mount,
 	{
 		init: function(cb) {
 			hwInfo();
@@ -185,5 +196,3 @@ fuse.mount(function(err) {
 		throw err;
 	}
 });
-
-// vim: set ts=4 sw=4 tw=0 noet :
